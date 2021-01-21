@@ -12,21 +12,25 @@ export class NatsPubSub implements PubSubEngine {
     this.nats = stan;
     this.subscriptions = [];
     this.messageParser = messageParser;
-    this.subscriptionOptions = subscriptionOptions;
+    this.subscriptionOptions = subscriptionOptions !== null ? subscriptionOptions : this.nats.subscriptionOptions();
   }
 
   public async publish(subject: string, payload: any): Promise<void> {
     await this.nats.publish(subject, JSON.stringify(payload));
   }
 
-  public async subscribe(subject: string, onMessage: Function): Promise<number> {
+  public async subscribe(subject: string, onMessage: Function, options: any): Promise<number> {
+    if(options.setStartAtSequence) {
+      this.subscriptionOptions.setStartAtSequence(options.setStartAtSequence);
+    }
+
     const subscription: Subscription = await this.nats.subscribe(subject, this.subscriptionOptions);
     subscription.on("message", msg => {
       var data: any = JSON.parse(msg.getData());
       if (this.messageParser) {
         data = this.messageParser(data);
       }
-      onMessage(data);
+      onMessage({ data, msg });
     });
     this.subscriptions.push(subscription);
     return Promise.resolve(this.subscriptions.length);
@@ -40,6 +44,10 @@ export class NatsPubSub implements PubSubEngine {
   }
 
   public asyncIterator<T>(subjects: string | string[]): AsyncIterator<T> {
-    return new PubSubAsyncIterator<T>(this, subjects);
+    return new PubSubAsyncIterator<T>(this, subjects, 0);
+  }
+
+  public asyncIterator2<T>(subjects: string | string[], setStartAtSequence: number): AsyncIterator<T> {
+    return new PubSubAsyncIterator<T>(this, subjects, setStartAtSequence);
   }
 }
